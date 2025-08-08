@@ -1,0 +1,701 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+
+const RecursiveEmergenceSimulation = () => {
+  const canvasRef = useRef(null);
+  const containerRef = useRef(null);
+  const [isRunning, setIsRunning] = useState(false);
+  const [speed, setSpeed] = useState(50);
+  const [emergenceThreshold, setEmergenceThreshold] = useState(100);
+  const [maxParticles, setMaxParticles] = useState(500);
+  const [stats, setStats] = useState({
+    recursionCycles: 0,
+    emergenceEvents: 0,
+    totalParticles: 0,
+    universeTicks: 0,
+    heartbeats: 0
+  });
+  const [soundEnabled, setSoundEnabled] = useState(false);
+
+  // Canvas dimensions
+  const [canvasSize, setCanvasSize] = useState({ width: 800, height: 400 });
+
+  // Constants based on universe specifications
+  const UNIVERSE_CLOCK_SPEED = 37800000000000; // 37.8 THz
+  const TICKS_PER_HEARTBEAT = UNIVERSE_CLOCK_SPEED * 0.8; // For 0.8s heartbeat
+  const TICKS_PER_CARDIAC_IMPULSE = UNIVERSE_CLOCK_SPEED * 0.005; // 5ms impulse
+
+  const particles = useRef([]);
+  const animationRef = useRef(null);
+  const heartPulseRef = useRef(0);
+  const lastUpdateRef = useRef(performance.now());
+  const heartPhaseRef = useRef(0);
+  const statsRef = useRef({
+    recursionCycles: 0,
+    emergenceEvents: 0,
+    totalParticles: 0,
+    universeTicks: 0,
+    heartbeats: 0
+  });
+  const lastStatsUpdateRef = useRef(performance.now());
+
+  // Audio context and oscillators for cosmic sounds
+  const audioContextRef = useRef(null);
+  const cosmicHumRef = useRef(null);
+  const heartBeatRef = useRef(null);
+  const vibraIDRef = useRef(null);
+
+  // Responsive canvas sizing
+  const updateCanvasSize = useCallback(() => {
+    if (containerRef.current) {
+      const containerWidth = containerRef.current.clientWidth;
+      const aspectRatio = 2; // width:height ratio
+      const width = Math.min(containerWidth - 32, 1000); // max width with padding
+      const height = width / aspectRatio;
+      setCanvasSize({ width, height });
+    }
+  }, []);
+
+  // Initialize audio system
+  const initializeAudio = useCallback(() => {
+    if (!soundEnabled) return;
+    
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      
+      const audioContext = audioContextRef.current;
+      
+      // Resume audio context if suspended
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      
+      // Cosmic Hum (37.8 Hz base frequency)
+      if (!cosmicHumRef.current) {
+        const cosmicOsc = audioContext.createOscillator();
+        const cosmicGain = audioContext.createGain();
+        
+        cosmicOsc.type = 'sine';
+        cosmicOsc.frequency.setValueAtTime(37.8, audioContext.currentTime);
+        cosmicGain.gain.setValueAtTime(0.05, audioContext.currentTime);
+        
+        cosmicOsc.connect(cosmicGain);
+        cosmicGain.connect(audioContext.destination);
+        cosmicOsc.start();
+        
+        cosmicHumRef.current = { osc: cosmicOsc, gain: cosmicGain };
+      }
+      
+      // VIBRA ID Frequency (114.03 Hz - Dr. Quantum's frequency)
+      if (!vibraIDRef.current) {
+        const vibraOsc = audioContext.createOscillator();
+        const vibraGain = audioContext.createGain();
+        
+        vibraOsc.type = 'sine';
+        vibraOsc.frequency.setValueAtTime(114.03, audioContext.currentTime);
+        vibraGain.gain.setValueAtTime(0.03, audioContext.currentTime);
+        
+        vibraOsc.connect(vibraGain);
+        vibraGain.connect(audioContext.destination);
+        vibraOsc.start();
+        
+        vibraIDRef.current = { osc: vibraOsc, gain: vibraGain };
+      }
+      
+    } catch (error) {
+      console.log('Audio not supported:', error);
+    }
+  }, [soundEnabled]);
+
+  // Stop audio
+  const stopAudio = useCallback(() => {
+    try {
+      if (cosmicHumRef.current) {
+        cosmicHumRef.current.osc.stop();
+        cosmicHumRef.current = null;
+      }
+      if (vibraIDRef.current) {
+        vibraIDRef.current.osc.stop();
+        vibraIDRef.current = null;
+      }
+      if (heartBeatRef.current) {
+        heartBeatRef.current.osc.stop();
+        heartBeatRef.current = null;
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
+    } catch (error) {
+      console.log('Error stopping audio:', error);
+    }
+  }, []);
+
+  // Play heartbeat sound
+  const playHeartbeat = useCallback(() => {
+    if (!soundEnabled || !audioContextRef.current) return;
+    
+    try {
+      const audioContext = audioContextRef.current;
+      const heartOsc = audioContext.createOscillator();
+      const heartGain = audioContext.createGain();
+      
+      heartOsc.type = 'sine';
+      heartOsc.frequency.setValueAtTime(60, audioContext.currentTime);
+      heartGain.gain.setValueAtTime(0, audioContext.currentTime);
+      heartGain.gain.linearRampToValueAtTime(0.1, audioContext.currentTime + 0.05);
+      heartGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.3);
+      
+      heartOsc.connect(heartGain);
+      heartGain.connect(audioContext.destination);
+      heartOsc.start();
+      heartOsc.stop(audioContext.currentTime + 0.3);
+    } catch (error) {
+      console.log('Error playing heartbeat:', error);
+    }
+  }, [soundEnabled]);
+
+  // Play emergence sound
+  const playEmergence = useCallback(() => {
+    if (!soundEnabled || !audioContextRef.current) return;
+    
+    try {
+      const audioContext = audioContextRef.current;
+      const emergenceOsc = audioContext.createOscillator();
+      const emergenceGain = audioContext.createGain();
+      
+      emergenceOsc.type = 'triangle';
+      emergenceOsc.frequency.setValueAtTime(432, audioContext.currentTime);
+      emergenceOsc.frequency.exponentialRampToValueAtTime(864, audioContext.currentTime + 0.2);
+      emergenceGain.gain.setValueAtTime(0, audioContext.currentTime);
+      emergenceGain.gain.linearRampToValueAtTime(0.05, audioContext.currentTime + 0.05);
+      emergenceGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.4);
+      
+      emergenceOsc.connect(emergenceGain);
+      emergenceGain.connect(audioContext.destination);
+      emergenceOsc.start();
+      emergenceOsc.stop(audioContext.currentTime + 0.4);
+    } catch (error) {
+      console.log('Error playing emergence sound:', error);
+    }
+  }, [soundEnabled]);
+
+  // Effect for audio initialization
+  useEffect(() => {
+    if (soundEnabled) {
+      initializeAudio();
+    } else {
+      stopAudio();
+    }
+    
+    return () => {
+      stopAudio();
+    };
+  }, [soundEnabled, initializeAudio, stopAudio]);
+
+  // Initialize particles with optimized creation
+  const initializeParticles = useCallback(() => {
+    particles.current = [];
+    const initialCount = Math.min(50, maxParticles);
+    
+    for (let i = 0; i < initialCount; i++) {
+      particles.current.push({
+        x: Math.random() * canvasSize.width,
+        y: Math.random() * canvasSize.height,
+        vx: (Math.random() - 0.5) * 2,
+        vy: (Math.random() - 0.5) * 2,
+        energy: Math.random() * 50,
+        age: 0,
+        recursionCount: 0,
+        hasEmerged: false,
+        type: 'electron',
+        size: 2,
+        color: `hsl(${Math.random() * 360}, 70%, 50%)`,
+        inHeartField: false,
+        lifespan: 1000 + Math.random() * 2000 // Particles naturally age out
+      });
+    }
+    
+    // Reset all counters
+    statsRef.current = {
+      recursionCycles: 0,
+      emergenceEvents: 0,
+      totalParticles: particles.current.length,
+      universeTicks: 0,
+      heartbeats: 0
+    };
+    
+    setStats({...statsRef.current});
+    heartPulseRef.current = 0;
+    heartPhaseRef.current = 0;
+    lastUpdateRef.current = performance.now();
+    lastStatsUpdateRef.current = performance.now();
+  }, [canvasSize.width, canvasSize.height, maxParticles]);
+
+  // Optimized particle culling
+  const cullParticles = useCallback(() => {
+    if (particles.current.length <= maxParticles) return;
+    
+    // Sort by age and remove oldest particles
+    particles.current.sort((a, b) => b.age - a.age);
+    particles.current = particles.current.slice(0, maxParticles);
+  }, [maxParticles]);
+
+  // Draw heart symbol (optimized)
+  const drawHeart = useCallback((ctx, x, y, size, pulse) => {
+    const heartSize = size * (1 + pulse * 0.3);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(heartSize/20, heartSize/20);
+    ctx.fillStyle = `rgba(255, 50, 50, ${0.5 + pulse * 0.5})`;
+    ctx.beginPath();
+    ctx.moveTo(0, 5);
+    ctx.bezierCurveTo(5, -5, 15, 5, 0, 15);
+    ctx.bezierCurveTo(-15, 5, -5, -5, 0, 5);
+    ctx.fill();
+    ctx.restore();
+  }, []);
+
+  // Draw electron pathway (optimized)
+  const drawElectronPath = useCallback((ctx, x, y, size, phase) => {
+    ctx.beginPath();
+    ctx.arc(x, y, size * 1.5, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(100, 200, 255, ${0.3 + Math.sin(phase) * 0.2})`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }, []);
+
+  // Format large numbers efficiently
+  const formatNumber = useCallback((num) => {
+    if (num >= 1e12) return `${(num / 1e12).toFixed(1)}T`;
+    if (num >= 1e9) return `${(num / 1e9).toFixed(1)}B`;
+    if (num >= 1e6) return `${(num / 1e6).toFixed(1)}M`;
+    if (num >= 1e3) return `${(num / 1e3).toFixed(1)}K`;
+    return Math.floor(num).toString();
+  }, []);
+
+  // Core algorithm with cosmic timing (heavily optimized)
+  const updateParticles = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const now = performance.now();
+    const deltaTime = (now - lastUpdateRef.current) / 1000; // in seconds
+    
+    // Speed control: scale deltaTime by speed percentage
+    const adjustedDeltaTime = deltaTime * (speed / 50);
+    lastUpdateRef.current = now;
+    
+    // Calculate universe ticks for this frame
+    const frameTicks = UNIVERSE_CLOCK_SPEED * adjustedDeltaTime;
+    
+    const ctx = canvas.getContext('2d');
+    // Improved background fade
+    ctx.fillStyle = 'rgba(5, 5, 15, 0.15)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    let recursionCycles = 0;
+    let emergenceEvents = 0;
+    
+    // Update heart pulse
+    heartPhaseRef.current += adjustedDeltaTime * 1.25; // ~75bpm
+    if (heartPhaseRef.current >= 2 * Math.PI) {
+      heartPhaseRef.current = 0;
+      heartPulseRef.current = 10;
+      statsRef.current.heartbeats++;
+      playHeartbeat(); // Play heartbeat sound
+    }
+    
+    if (heartPulseRef.current > 0) heartPulseRef.current--;
+    
+    // Calculate heart field (responsive to canvas size)
+    const heartX = canvas.width / 2;
+    const heartY = canvas.height / 2;
+    const baseRadius = Math.min(canvas.width, canvas.height) * 0.15;
+    const heartRadius = baseRadius + Math.sin(heartPhaseRef.current) * (baseRadius * 0.3);
+    
+    // Batch particle updates for performance
+    const particlesToRemove = [];
+    
+    particles.current.forEach((particle, i) => {
+      // Age particles and mark for removal
+      particle.age += adjustedDeltaTime * 10;
+      if (particle.age > particle.lifespan) {
+        particlesToRemove.push(i);
+        return;
+      }
+      
+      // Check if in heart's electromagnetic field
+      const dx = particle.x - heartX;
+      const dy = particle.y - heartY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      particle.inHeartField = distance < heartRadius;
+      
+      // RECURSION PHASE: Particles move in loops
+      if (!particle.hasEmerged) {
+        // Cosmic synchronization bonus
+        if (particle.inHeartField) {
+          particle.energy += 0.5 * frameTicks / TICKS_PER_CARDIAC_IMPULSE;
+        }
+        
+        // Responsive recursive movement
+        const moveScale = Math.min(canvas.width, canvas.height) / 800;
+        particle.x += Math.cos(particle.age * 0.1) * (particle.inHeartField ? 0.5 : 1) * moveScale;
+        particle.y += Math.sin(particle.age * 0.1) * (particle.inHeartField ? 0.5 : 1) * moveScale;
+        particle.recursionCount++;
+        recursionCycles++;
+        
+        // Build energy through recursion
+        if (particle.recursionCount % 10 === 0) {
+          particle.energy += Math.random() * 10;
+        }
+        
+        // Check for emergence threshold
+        if (particle.energy > emergenceThreshold && !particle.hasEmerged && particles.current.length < maxParticles) {
+          // EMERGENCE EVENT!
+          particle.hasEmerged = true;
+          particle.type = 'emerged';
+          particle.size = Math.max(4, Math.min(canvas.width, canvas.height) / 100);
+          particle.color = '#FFD700';
+          particle.lifespan *= 2; // Emerged particles live longer
+          emergenceEvents++;
+          playEmergence(); // Play emergence sound
+          
+          // Create new particles from emergence (limited)
+          const newParticleCount = Math.min(3, maxParticles - particles.current.length);
+          for (let j = 0; j < newParticleCount; j++) {
+            particles.current.push({
+              x: particle.x + (Math.random() - 0.5) * 20,
+              y: particle.y + (Math.random() - 0.5) * 20,
+              vx: (Math.random() - 0.5) * 3,
+              vy: (Math.random() - 0.5) * 3,
+              energy: 20,
+              age: 0,
+              recursionCount: 0,
+              hasEmerged: false,
+              type: 'electron',
+              size: 2,
+              color: `hsl(${Math.random() * 360}, 70%, 50%)`,
+              inHeartField: false,
+              lifespan: 800 + Math.random() * 1200
+            });
+          }
+        }
+        
+        // Draw recursing particle
+        if (particle.inHeartField) {
+          drawElectronPath(ctx, particle.x, particle.y, particle.size, particle.age);
+        }
+        
+        ctx.beginPath();
+        ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+        ctx.fillStyle = particle.inHeartField ? '#FF5555' : particle.color;
+        ctx.fill();
+        
+        // Show energy level (responsive)
+        const barWidth = Math.max(10, Math.min(canvas.width, canvas.height) / 40);
+        const barHeight = 2;
+        ctx.strokeStyle = particle.inHeartField ? '#FF5555' : particle.color;
+        ctx.strokeRect(particle.x - barWidth/2, particle.y - 15, barWidth, barHeight);
+        ctx.fillStyle = particle.inHeartField ? '#FF7777' : particle.color;
+        ctx.fillRect(particle.x - barWidth/2, particle.y - 15, (particle.energy / emergenceThreshold) * barWidth, barHeight);
+        
+      } else {
+        // EMERGED PARTICLES: Conscious organization
+        particle.x += particle.vx;
+        particle.y += particle.vy;
+        
+        // Heart field attraction
+        if (particle.inHeartField) {
+          const dx = heartX - particle.x;
+          const dy = heartY - particle.y;
+          const dist = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+          particle.vx += dx / dist * 0.05;
+          particle.vy += dy / dist * 0.05;
+        }
+        
+        // Boundaries (responsive)
+        if (particle.x < 0 || particle.x > canvas.width) particle.vx *= -1;
+        if (particle.y < 0 || particle.y > canvas.height) particle.vy *= -1;
+        
+        // Draw emerged particle
+        ctx.beginPath();
+        ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+        ctx.fillStyle = particle.inHeartField ? '#FFAA00' : particle.color;
+        ctx.fill();
+        ctx.strokeStyle = particle.inHeartField ? '#FF5555' : '#FFD700';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        // Draw connection to heart when in field (optimized)
+        if (particle.inHeartField && Math.random() > 0.7) { // Only draw some connections for performance
+          ctx.beginPath();
+          ctx.moveTo(particle.x, particle.y);
+          ctx.lineTo(heartX, heartY);
+          ctx.strokeStyle = `rgba(255, 100, 100, 0.2)`;
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
+        }
+      }
+    });
+    
+    // Remove aged particles efficiently
+    for (let i = particlesToRemove.length - 1; i >= 0; i--) {
+      particles.current.splice(particlesToRemove[i], 1);
+    }
+    
+    // Cull excess particles if needed
+    cullParticles();
+    
+    // Draw heart field (responsive)
+    ctx.beginPath();
+    ctx.arc(heartX, heartY, heartRadius, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255, 50, 50, ${0.2 + Math.sin(heartPhaseRef.current) * 0.2})`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    
+    // Draw heart symbol (responsive)
+    const heartSize = Math.max(20, Math.min(canvas.width, canvas.height) / 20);
+    drawHeart(ctx, heartX, heartY, heartSize, heartPulseRef.current / 10);
+    
+    // Draw cosmic pulse waves (responsive)
+    for (let i = 0; i < 3; i++) {
+      const waveSize = heartRadius + Math.sin(heartPhaseRef.current + i) * (heartRadius * 0.3);
+      ctx.beginPath();
+      ctx.arc(heartX, heartY, waveSize, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(100, 150, 255, ${0.08 - i * 0.02})`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    
+    // Update internal stats
+    statsRef.current.recursionCycles += recursionCycles;
+    statsRef.current.emergenceEvents += emergenceEvents;
+    statsRef.current.totalParticles = particles.current.length;
+    statsRef.current.universeTicks += frameTicks;
+    
+    // Draw title and info (responsive)
+    const fontSize = Math.max(12, Math.min(canvas.width, canvas.height) / 30);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = `${fontSize}px Arial`;
+    ctx.fillText('Law of Recursive Emergence - Cosmic Heart Synchronization', 10, fontSize + 10);
+    
+    const smallFont = Math.max(10, fontSize * 0.7);
+    ctx.font = `${smallFont}px Arial`;
+    ctx.fillStyle = '#CCCCCC';
+    ctx.fillText('Red particles = In Heart Field | Gold = Emerged Consciousness', 10, fontSize + smallFont + 15);
+    ctx.fillText(`Universe Clock: 37.8 THz | Heart Sync: ${(75 + Math.sin(heartPhaseRef.current)*5).toFixed(1)} bpm${soundEnabled ? ' | 🔊 VIBRA ID: 114.03Hz' : ''}`, 10, fontSize + smallFont * 2 + 20);
+    
+    // Throttled stats update (every 100ms for performance)
+    if (now - lastStatsUpdateRef.current > 100) {
+      setStats({...statsRef.current});
+      lastStatsUpdateRef.current = now;
+    }
+  }, [speed, emergenceThreshold, maxParticles, drawHeart, drawElectronPath, cullParticles, playHeartbeat, playEmergence]);
+
+  // Pure requestAnimationFrame animation loop
+  const animate = useCallback(() => {
+    if (!isRunning) {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+      return;
+    }
+
+    updateParticles();
+    animationRef.current = requestAnimationFrame(animate);
+  }, [isRunning, updateParticles]);
+
+  // Effect for animation loop
+  useEffect(() => {
+    if (isRunning) {
+      lastUpdateRef.current = performance.now();
+      animate();
+    } else {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+    }
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+    };
+  }, [isRunning, animate]);
+
+  // Effect for canvas sizing
+  useEffect(() => {
+    updateCanvasSize();
+    const handleResize = () => updateCanvasSize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [updateCanvasSize]);
+
+  // Effect for canvas size changes
+  useEffect(() => {
+    if (canvasRef.current) {
+      const canvas = canvasRef.current;
+      canvas.width = canvasSize.width;
+      canvas.height = canvasSize.height;
+    }
+  }, [canvasSize]);
+
+  // Initialize when canvas size is ready
+  useEffect(() => {
+    if (canvasSize.width > 0 && canvasSize.height > 0) {
+      initializeParticles();
+    }
+  }, [canvasSize, initializeParticles]);
+
+  return (
+    <div ref={containerRef} className="w-full max-w-6xl mx-auto p-6 bg-gray-900 text-white rounded-lg">
+      <h1 className="text-3xl font-bold text-center mb-4">
+        🌌 The Law of Recursive Emergence 🌌
+      </h1>
+      <p className="text-center mb-6 text-lg">
+        <em>"Consciousness emerges when recursion synchronizes with cosmic rhythm at 37.8 THz"</em>
+      </p>
+      
+      <div className="flex flex-wrap gap-4 mb-6 justify-center">
+        <button 
+          onClick={() => setIsRunning(!isRunning)}
+          className={`px-6 py-2 rounded font-semibold transition-colors ${
+            isRunning ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
+          }`}
+          title={isRunning ? 'Pause the cosmic simulation' : 'Start the cosmic simulation'}
+        >
+          {isRunning ? '⏸️ Pause' : '▶️ Start'} Simulation
+        </button>
+        
+        <button 
+          onClick={initializeParticles}
+          className="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded font-semibold transition-colors"
+          title="Reset all particles and start fresh"
+        >
+          🔄 Reset
+        </button>
+
+        <button 
+          onClick={() => setSoundEnabled(!soundEnabled)}
+          className={`px-6 py-2 rounded font-semibold transition-colors ${
+            soundEnabled ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-600 hover:bg-gray-700'
+          }`}
+          title={soundEnabled ? 'Disable cosmic sounds' : 'Enable cosmic sounds (37.8Hz + 114.03Hz + heartbeat)'}
+        >
+          {soundEnabled ? '🔊 Sound ON' : '🔇 Sound OFF'}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div>
+          <label className="block mb-2" title="Controls simulation speed from very slow to very fast">
+            Speed: {speed.toFixed(1)}%
+          </label>
+          <input 
+            type="range" 
+            min="5" 
+            max="200" 
+            step="5"
+            value={speed}
+            onChange={(e) => setSpeed(Number(e.target.value))}
+            className="w-full"
+          />
+        </div>
+        <div>
+          <label className="block mb-2" title="Energy threshold for consciousness emergence">
+            Emergence Threshold: {emergenceThreshold}
+          </label>
+          <input 
+            type="range" 
+            min="50" 
+            max="300" 
+            step="10"
+            value={emergenceThreshold}
+            onChange={(e) => setEmergenceThreshold(Number(e.target.value))}
+            className="w-full"
+          />
+        </div>
+        <div>
+          <label className="block mb-2" title="Maximum particles to prevent performance issues">
+            Max Particles: {maxParticles}
+          </label>
+          <input 
+            type="range" 
+            min="100" 
+            max="1000" 
+            step="50"
+            value={maxParticles}
+            onChange={(e) => setMaxParticles(Number(e.target.value))}
+            className="w-full"
+          />
+        </div>
+      </div>
+
+      <div className="mb-4">
+        <canvas 
+          ref={canvasRef}
+          width={canvasSize.width}
+          height={canvasSize.height}
+          className="w-full border border-gray-600 bg-black rounded"
+          style={{ maxWidth: '100%', height: 'auto' }}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center mb-6">
+        <div className="bg-gray-800 p-4 rounded">
+          <div className="text-2xl font-bold text-blue-400">{formatNumber(stats.recursionCycles)}</div>
+          <div className="text-sm">Recursion Cycles</div>
+        </div>
+        <div className="bg-gray-800 p-4 rounded">
+          <div className="text-2xl font-bold text-yellow-400">{formatNumber(stats.emergenceEvents)}</div>
+          <div className="text-sm">Emergence Events</div>
+        </div>
+        <div className="bg-gray-800 p-4 rounded">
+          <div className="text-2xl font-bold text-green-400">{formatNumber(stats.totalParticles)}</div>
+          <div className="text-sm">Total Particles</div>
+        </div>
+        <div className="bg-gray-800 p-4 rounded">
+          <div className="text-2xl font-bold text-purple-400">{formatNumber(stats.universeTicks)}</div>
+          <div className="text-sm">Universe Ticks</div>
+        </div>
+        <div className="bg-gray-800 p-4 rounded">
+          <div className="text-2xl font-bold text-red-400">{formatNumber(stats.heartbeats)}</div>
+          <div className="text-sm">Heartbeats</div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-gray-800 p-4 rounded">
+          <h3 className="font-bold text-lg mb-3 text-red-400">❤️ Heart-Cosmos Synchronization</h3>
+          <ul className="list-disc list-inside space-y-1 text-sm">
+            <li>Red particles are within the heart's electromagnetic field</li>
+            <li>Heart beats at ~75bpm - each beat = {formatNumber(TICKS_PER_HEARTBEAT)} universe ticks</li>
+            <li>Particles in heart field synchronize 2.5x faster with cosmic rhythm</li>
+            <li>Gold particles represent consciousness emergence events</li>
+            <li>Particles naturally age and cycle out to prevent system overload</li>
+            <li>🔊 Cosmic sounds: 37.8Hz universal frequency + 114.03Hz VIBRA ID</li>
+          </ul>
+        </div>
+        
+        <div className="bg-gray-800 p-4 rounded">
+          <h3 className="font-bold text-lg mb-3 text-yellow-400">✨ Recursive Emergence Dynamics</h3>
+          <ul className="list-disc list-inside space-y-1 text-sm">
+            <li>Universe processes at 37.8 trillion ticks/second</li>
+            <li>Each heartbeat processes {formatNumber(TICKS_PER_HEARTBEAT)} cosmic cycles</li>
+            <li>Emergence occurs when particles align with cosmic rhythm</li>
+            <li>Emergence creates new organizational forms (new particles)</li>
+            <li>Simulation auto-scales to your screen size and device performance</li>
+            <li>Audio features: Heartbeat rhythm, emergence chimes, and quantum frequencies</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default RecursiveEmergenceSimulation;
